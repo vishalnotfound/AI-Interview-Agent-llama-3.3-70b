@@ -6,13 +6,15 @@ import EvaluationCard from './EvaluationCard';
 
 const TOTAL_QUESTIONS = 5;
 const MAX_RECORD_SECONDS = 90;
+const SILENCE_TIMEOUT_MS = 3000; // auto-submit after 3s of silence
 
 export default function InterviewSession({ sessionId, firstQuestion, onComplete }) {
   const [currentQuestion, setCurrentQuestion] = useState(firstQuestion);
   const [questionNumber, setQuestionNumber] = useState(1);
   const [transcript, setTranscript] = useState('');
   const [isRecording, setIsRecording] = useState(false);
-  const [status, setStatus] = useState('idle'); // idle | recording | evaluating
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [status, setStatus] = useState('speaking'); // speaking | recording | evaluating | idle
   const [evaluation, setEvaluation] = useState(null);
   const [error, setError] = useState('');
   const [previousQuestions, setPreviousQuestions] = useState([]);
@@ -22,7 +24,10 @@ export default function InterviewSession({ sessionId, firstQuestion, onComplete 
 
   const recognitionRef = useRef(null);
   const timerRef = useRef(null);
+  const silenceRef = useRef(null);
   const transcriptRef = useRef('');
+  const isSubmittingRef = useRef(false);
+  const shouldListenRef = useRef(false);
 
   // Check speech recognition support
   useEffect(() => {
@@ -32,7 +37,45 @@ export default function InterviewSession({ sessionId, firstQuestion, onComplete 
     }
   }, []);
 
+  // Speak the question aloud using TTS
+  const speakQuestion = useCallback((text) => {
+    return new Promise((resolve) => {
+      if (!window.speechSynthesis) {
+        resolve();
+        return;
+      }
+      // Cancel any ongoing speech
+      window.speechSynthesis.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.95;
+      utterance.pitch = 1;
+      utterance.lang = 'en-US';
+
+      // Try to pick a good voice
+      const voices = window.speechSynthesis.getVoices();
+      const preferred = voices.find(v =>
+        v.lang.startsWith('en') && v.name.includes('Google')
+      ) || voices.find(v => v.lang.startsWith('en'));
+      if (preferred) utterance.voice = preferred;
+
+      utterance.onstart = () => setIsSpeaking(true);
+      utterance.onend = () => {
+        setIsSpeaking(false);
+        resolve();
+      };
+      utterance.onerror = () => {
+        setIsSpeaking(false);
+        resolve();
+      };
+
+      window.speechSynthesis.speak(utterance);
+    });
+  }, []);
+
+  // Stop recording
   const stopRecording = useCallback(() => {
+    shouldListenRef.current = false;
     if (recognitionRef.current) {
       recognitionRef.current.stop();
       recognitionRef.current = null;
@@ -41,21 +84,87 @@ export default function InterviewSession({ sessionId, firstQuestion, onComplete 
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
+    if (silenceRef.current) {
+      clearTimeout(silenceRef.current);
+      silenceRef.current = null;
+    }
     setIsRecording(false);
   }, []);
 
-  const startRecording = useCallback(() => {
+  // Submit the answer
+  const handleSubmit = useCallback(async () => {
+    if (isSubmittingRef.current) return;
+    const answer = transcriptRef.current.trim();
+    if (!answer) {
+      setError('No speech detected. Listening again...');
+      // Re-listen after a brief pause
+      setTimeout(() => startListening(), 1500);
+      return;
+    }
+
+    isSubmittingRef.current = true;
+    stopRecording();
+    setStatus('evaluating');
+    setError('');
+
+    try {
+      const data = await evaluateAnswer({
+        session_id: sessionId,
+        current_question: currentQuestion,
+        current_answer: answer,
+        previous_questions: previousQuestions,
+        previous_answers: previousAnswers,
+      });
+
+      if (data.final_report) {
+        setEvaluation(data.evaluation);
+        // Speak a summary before showing the report
+        await speakQuestion("Great job! Your interview is complete. Here are your results.");
+        onComplete(data.final_report);
+        isSubmittingRef.current = false;
+        return;
+      }
+
+      setEvaluation(data.evaluation);
+      setPreviousQuestions((prev) => [...prev, currentQuestion]);
+      setPreviousAnswers((prev) => [...prev, answer]);
+
+      const nextQ = data.next_question;
+      setCurrentQuestion(nextQ);
+      setQuestionNumber(data.question_count + 1);
+      setTranscript('');
+      transcriptRef.current = '';
+      isSubmittingRef.current = false;
+
+      // Brief pause to show evaluation, then speak next question
+      setStatus('idle');
+      setTimeout(async () => {
+        setEvaluation(null);
+        setStatus('speaking');
+        await speakQuestion(nextQ);
+        startListening();
+      }, 2500);
+    } catch (err) {
+      setError(err.message || 'Evaluation failed. Retrying...');
+      setStatus('idle');
+      isSubmittingRef.current = false;
+    }
+  }, [sessionId, currentQuestion, previousQuestions, previousAnswers, onComplete, stopRecording, speakQuestion]);
+
+  // Start listening for speech
+  const startListening = useCallback(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      setError('Speech recognition is not supported in your browser. Please use Chrome.');
+      setError('Speech recognition not supported. Please use Chrome.');
       return;
     }
 
     setTranscript('');
     transcriptRef.current = '';
-    setEvaluation(null);
     setError('');
     setTimer(MAX_RECORD_SECONDS);
+    isSubmittingRef.current = false;
+    shouldListenRef.current = true;
 
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
@@ -63,6 +172,18 @@ export default function InterviewSession({ sessionId, firstQuestion, onComplete 
     recognition.lang = 'en-US';
 
     let finalTranscript = '';
+
+    // Reset silence timer on every speech result
+    const resetSilenceTimer = () => {
+      if (silenceRef.current) clearTimeout(silenceRef.current);
+      silenceRef.current = setTimeout(() => {
+        // Auto-submit after silence
+        if (transcriptRef.current.trim() && !isSubmittingRef.current) {
+          stopRecording();
+          handleSubmit();
+        }
+      }, SILENCE_TIMEOUT_MS);
+    };
 
     recognition.onresult = (event) => {
       let interim = '';
@@ -77,23 +198,22 @@ export default function InterviewSession({ sessionId, firstQuestion, onComplete 
       const full = finalTranscript + interim;
       transcriptRef.current = full;
       setTranscript(full);
+      resetSilenceTimer();
     };
 
     recognition.onerror = (event) => {
-      if (event.error !== 'aborted') {
-        setError(`Speech recognition error: ${event.error}`);
-        stopRecording();
-        setStatus('idle');
+      if (event.error !== 'aborted' && event.error !== 'no-speech') {
+        setError(`Speech error: ${event.error}`);
       }
     };
 
     recognition.onend = () => {
-      // If still in recording state, the recognition ended unexpectedly — restart
-      if (recognitionRef.current) {
+      // Restart if we're still supposed to be listening
+      if (shouldListenRef.current && !isSubmittingRef.current) {
         try {
           recognition.start();
         } catch (e) {
-          // already started or stopped
+          // already started
         }
       }
     };
@@ -103,74 +223,41 @@ export default function InterviewSession({ sessionId, firstQuestion, onComplete 
     setIsRecording(true);
     setStatus('recording');
 
-    // Auto-stop timer
+    // Start silence timer
+    resetSilenceTimer();
+
+    // Max time auto-stop
     timerRef.current = setInterval(() => {
       setTimer((prev) => {
         if (prev <= 1) {
           stopRecording();
-          setStatus('idle');
+          handleSubmit();
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
-  }, [stopRecording]);
+  }, [stopRecording, handleSubmit]);
 
-  const handleStop = useCallback(() => {
-    stopRecording();
-    setStatus('idle');
-  }, [stopRecording]);
-
-  const handleSubmit = useCallback(async () => {
-    const answer = transcriptRef.current.trim();
-    if (!answer) {
-      setError('No transcript detected. Please try answering again.');
-      return;
-    }
-
-    setStatus('evaluating');
-    setError('');
-
-    try {
-      const data = await evaluateAnswer({
-        session_id: sessionId,
-        current_question: currentQuestion,
-        current_answer: answer,
-        previous_questions: previousQuestions,
-        previous_answers: previousAnswers,
-      });
-
-      if (data.final_report) {
-        // Last question — show evaluation then trigger report
-        setEvaluation(data.evaluation);
-        setTimeout(() => {
-          onComplete(data.final_report);
-        }, 3000);
-        setStatus('idle');
-        return;
-      }
-
-      setEvaluation(data.evaluation);
-      setPreviousQuestions((prev) => [...prev, currentQuestion]);
-      setPreviousAnswers((prev) => [...prev, answer]);
-      setCurrentQuestion(data.next_question);
-      setQuestionNumber(data.question_count + 1);
-      setTranscript('');
-      transcriptRef.current = '';
-      setStatus('idle');
-    } catch (err) {
-      setError(err.message || 'Evaluation failed.');
-      setStatus('idle');
-    }
-  }, [sessionId, currentQuestion, previousQuestions, previousAnswers, onComplete]);
-
-  // Cleanup on unmount
+  // Speak the first question on mount
   useEffect(() => {
+    const init = async () => {
+      // Small delay to let voices load
+      await new Promise(r => setTimeout(r, 500));
+      window.speechSynthesis?.getVoices();
+      setStatus('speaking');
+      await speakQuestion(firstQuestion);
+      startListening();
+    };
+    init();
+
     return () => {
+      window.speechSynthesis?.cancel();
       if (recognitionRef.current) recognitionRef.current.stop();
       if (timerRef.current) clearInterval(timerRef.current);
+      if (silenceRef.current) clearTimeout(silenceRef.current);
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!speechSupported) {
     return (
@@ -193,40 +280,42 @@ export default function InterviewSession({ sessionId, firstQuestion, onComplete 
 
       <TranscriptBox transcript={transcript} isRecording={isRecording} />
 
-      {isRecording && (
-        <div className="timer-bar">
-          <span>⏱️ {timer}s remaining</span>
+      {status === 'speaking' && (
+        <div className="status-indicator speaking-indicator">
+          <div className="sound-wave">
+            <span /><span /><span /><span /><span />
+          </div>
+          <span>AI is asking the question...</span>
         </div>
       )}
 
-      <div className="controls">
-        {status === 'idle' && !transcript && (
-          <button className="btn btn-record" onClick={startRecording}>
-            🎤 Start Answer
-          </button>
-        )}
-        {status === 'recording' && (
-          <button className="btn btn-stop" onClick={handleStop}>
-            ⏹️ Stop Recording
-          </button>
-        )}
-        {status === 'idle' && transcript && (
-          <div className="submit-controls">
-            <button className="btn btn-secondary" onClick={startRecording}>
-              🔄 Re-record
-            </button>
-            <button className="btn btn-primary" onClick={handleSubmit}>
-              ✅ Submit Answer
-            </button>
-          </div>
-        )}
-        {status === 'evaluating' && (
-          <div className="evaluating-indicator">
-            <div className="spinner" />
-            <span>Evaluating your answer...</span>
-          </div>
-        )}
-      </div>
+      {status === 'recording' && (
+        <div className="status-indicator recording-indicator">
+          <span className="rec-dot" />
+          <span>Listening... (auto-submits after {SILENCE_TIMEOUT_MS / 1000}s of silence)</span>
+          <span className="timer-text">⏱️ {timer}s</span>
+        </div>
+      )}
+
+      {status === 'evaluating' && (
+        <div className="status-indicator evaluating-indicator">
+          <div className="spinner" />
+          <span>Evaluating your answer...</span>
+        </div>
+      )}
+
+      {status === 'idle' && (
+        <div className="status-indicator">
+          <span>Preparing next question...</span>
+        </div>
+      )}
+
+      {/* Manual stop button as a fallback */}
+      {status === 'recording' && (
+        <button className="btn btn-stop" onClick={() => { stopRecording(); handleSubmit(); }}>
+          ⏹️ Done Speaking
+        </button>
+      )}
 
       {error && <p className="error-text">{error}</p>}
 
