@@ -6,7 +6,7 @@ import EvaluationCard from './EvaluationCard';
 
 const TOTAL_QUESTIONS = 5;
 const MAX_RECORD_SECONDS = 90;
-const SILENCE_TIMEOUT_MS = 3000; // auto-submit after 3s of silence
+const SILENCE_TIMEOUT_MS = 6000; // auto-submit after 6s of silence
 
 export default function InterviewSession({ sessionId, firstQuestion, onComplete }) {
   const [currentQuestion, setCurrentQuestion] = useState(firstQuestion);
