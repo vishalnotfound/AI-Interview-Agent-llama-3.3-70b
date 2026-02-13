@@ -20,7 +20,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# In-memory session store
+# In-memory session 
 sessions: dict = {}
 
 TOTAL_QUESTIONS = 5
