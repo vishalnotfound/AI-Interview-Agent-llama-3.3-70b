@@ -229,32 +229,59 @@ export default function InterviewSession({ sessionId, firstQuestion, onComplete 
 
   return (
     <div className="interview-container">
-      <QuestionCard question={currentQuestion} questionNumber={questionNumber} total={TOTAL_QUESTIONS} />
-
-      <TranscriptBox transcript={transcript} isRecording={isRecording} />
-
-      {status === 'speaking' && (
-        <div className="status-indicator speaking-indicator">
-          <div className="sound-wave"><span /><span /><span /><span /><span /></div>
-          <span>AI Agent Speaking...</span>
+      {/* Circular Agent Avatar */}
+      <div className="agent-section">
+        <div className={`agent-avatar ${status}`}>
+          <div className="agent-ring" />
+          <div className="agent-icon">
+            {status === 'speaking' && '🗣️'}
+            {status === 'recording' && '👂'}
+            {status === 'processing' && '⚙️'}
+            {status === 'idle' && '🤖'}
+          </div>
         </div>
-      )}
-
-      {status === 'recording' && (
-        <div className="status-indicator recording-indicator">
-          <span className="rec-dot" />
-          <span>Listening Answer... (auto-submits after {SILENCE_TIMEOUT_MS / 1000}s of silence)</span>
-          <span className="timer-text">⏱️ {timer}s</span>
+        <div className="agent-status-label">
+          {status === 'speaking' && 'AI Agent Speaking...'}
+          {status === 'recording' && 'Listening to Your Answer...'}
+          {status === 'processing' && 'Generating Next Question...'}
+          {status === 'idle' && 'Ready'}
         </div>
-      )}
+        {status === 'recording' && (
+          <div className="timer-pill">
+            <span className="rec-dot" />
+            <span>⏱️ {timer}s</span>
+          </div>
+        )}
+      </div>
 
-      {status === 'processing' && (
-        <div className="status-indicator evaluating-indicator">
-          <div className="spinner" />
-          <span>Generating next question...</span>
+      {/* Progress Bar */}
+      <div className="question-progress">
+        <span className="question-badge">Question {questionNumber}/{TOTAL_QUESTIONS}</span>
+        <div className="progress-bar-track">
+          <div
+            className="progress-bar-fill"
+            style={{ width: `${(questionNumber / TOTAL_QUESTIONS) * 100}%` }}
+          />
         </div>
-      )}
+      </div>
 
+      {/* Question Text */}
+      <div className="question-bubble">
+        <p className="question-text">{currentQuestion}</p>
+      </div>
+
+      {/* Transcript */}
+      <div className={`transcript-box ${isRecording ? 'recording' : ''}`}>
+        <div className="transcript-header">
+          {isRecording && <span className="rec-dot" />}
+          <span>{isRecording ? 'Your Answer' : 'Transcript'}</span>
+        </div>
+        <p className="transcript-text">
+          {transcript || (isRecording ? 'Start speaking...' : 'Waiting for your response...')}
+        </p>
+      </div>
+
+      {/* Action Button */}
       {status === 'recording' && (
         <button className="btn btn-stop" onClick={() => { stopRecording(); handleSubmit(); }}>
           ⏹️ Done Speaking
