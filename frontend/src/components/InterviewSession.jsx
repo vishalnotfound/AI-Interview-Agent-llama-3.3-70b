@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { submitAnswer } from '../api';
-import QuestionCard from './QuestionCard';
-import TranscriptBox from './TranscriptBox';
 
 const TOTAL_QUESTIONS = 5;
 const MAX_RECORD_SECONDS = 90;
