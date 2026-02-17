@@ -3,7 +3,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from services.resume_parser import parse_resume
-from services.gemini_service import (
+from services.groq_service import (
     generate_first_question,
     generate_next_question,
     generate_final_report,

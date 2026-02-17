@@ -135,7 +135,7 @@ export default function InterviewSession({ sessionId, firstQuestion, onComplete 
     const resetSilenceTimer = () => {
       if (silenceRef.current) clearTimeout(silenceRef.current);
       silenceRef.current = setTimeout(() => {
-        if (transcriptRef.current.trim() && !isSubmittingRef.current) {
+        if (transcriptRef.current.trim() && !isSubmittingRef.current && !window.speechSynthesis?.speaking) {
           stopRecording();
           handleSubmit();
         }
@@ -171,7 +171,9 @@ export default function InterviewSession({ sessionId, firstQuestion, onComplete 
     recognition.start();
     setIsRecording(true);
     setStatus('recording');
-    resetSilenceTimer();
+    // Silence timer is NOT started here — it only starts when the user
+    // actually begins speaking (via resetSilenceTimer() in onresult).
+    // This prevents auto-submit while the AI is still reading the question.
 
     timerRef.current = setInterval(() => {
       setTimer((prev) => {
