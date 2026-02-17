@@ -236,14 +236,14 @@ export default function InterviewSession({ sessionId, firstQuestion, onComplete 
       {status === 'speaking' && (
         <div className="status-indicator speaking-indicator">
           <div className="sound-wave"><span /><span /><span /><span /><span /></div>
-          <span>AI is asking the question...</span>
+          <span>AI Agent Speaking...</span>
         </div>
       )}
 
       {status === 'recording' && (
         <div className="status-indicator recording-indicator">
           <span className="rec-dot" />
-          <span>Listening... (auto-submits after {SILENCE_TIMEOUT_MS / 1000}s of silence)</span>
+          <span>Listening Answer... (auto-submits after {SILENCE_TIMEOUT_MS / 1000}s of silence)</span>
           <span className="timer-text">⏱️ {timer}s</span>
         </div>
       )}
