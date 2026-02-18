@@ -2,6 +2,7 @@ import uuid
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from models.schemas import EvaluateRequest
 from services.resume_parser import parse_resume
 from services.groq_service import (
     generate_first_question,
@@ -56,13 +57,13 @@ async def upload_resume(file: UploadFile = File(...)):
 
 
 @app.post("/submit-answer")
-async def submit_answer(req: dict):
+async def submit_answer(req: EvaluateRequest):
     """Accept an answer, generate next question or final report after 5 questions."""
-    session_id = req.get("session_id")
-    current_question = req.get("current_question", "")
-    current_answer = req.get("current_answer", "")
-    previous_questions = req.get("previous_questions", [])
-    previous_answers = req.get("previous_answers", [])
+    session_id = req.session_id
+    current_question = req.current_question
+    current_answer = req.current_answer
+    previous_questions = req.previous_questions
+    previous_answers = req.previous_answers
 
     session = sessions.get(session_id)
     if not session:

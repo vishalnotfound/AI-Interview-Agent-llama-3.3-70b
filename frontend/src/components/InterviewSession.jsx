@@ -24,6 +24,8 @@ export default function InterviewSession({ sessionId, firstQuestion, onComplete 
   const transcriptRef = useRef('');
   const isSubmittingRef = useRef(false);
   const shouldListenRef = useRef(false);
+  const handleSubmitRef = useRef(null);
+  const startListeningRef = useRef(null);
 
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -66,7 +68,7 @@ export default function InterviewSession({ sessionId, firstQuestion, onComplete 
     const answer = transcriptRef.current.trim();
     if (!answer) {
       setError('No speech detected. Listening again...');
-      setTimeout(() => startListening(), 1500);
+      setTimeout(() => startListeningRef.current?.(), 1500);
       return;
     }
 
@@ -104,7 +106,7 @@ export default function InterviewSession({ sessionId, firstQuestion, onComplete 
       // Speak the next question immediately
       setStatus('speaking');
       await speakQuestion(nextQ);
-      startListening();
+      startListeningRef.current?.();
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.');
       setStatus('idle');
@@ -140,7 +142,7 @@ export default function InterviewSession({ sessionId, firstQuestion, onComplete 
         }
         if (!isSubmittingRef.current) {
           stopRecording();
-          handleSubmit(); // handles both empty (restarts) and non-empty (submits)
+          handleSubmitRef.current?.(); // handles both empty (restarts) and non-empty (submits)
         }
       }, SILENCE_TIMEOUT_MS);
     };
@@ -189,11 +191,15 @@ export default function InterviewSession({ sessionId, firstQuestion, onComplete 
 
     timerRef.current = setInterval(() => {
       setTimer((prev) => {
-        if (prev <= 1) { stopRecording(); handleSubmit(); return 0; }
+        if (prev <= 1) { stopRecording(); handleSubmitRef.current?.(); return 0; }
         return prev - 1;
       });
     }, 1000);
-  }, [stopRecording, handleSubmit]);
+  }, [stopRecording]);
+
+  // Keep refs in sync with latest function versions — breaks circular dependency
+  useEffect(() => { handleSubmitRef.current = handleSubmit; }, [handleSubmit]);
+  useEffect(() => { startListeningRef.current = startListening; }, [startListening]);
 
   // Speak the first question on mount
   useEffect(() => {
