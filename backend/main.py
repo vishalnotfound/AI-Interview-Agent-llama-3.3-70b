@@ -42,11 +42,6 @@ async def upload_resume(file: UploadFile = File(...)):
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to parse resume file.")
 
-    try:
-        first_question = generate_first_question(resume_text)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"AI API error: {str(e)}")
-
     # Validate that the document is actually a resume
     try:
         if not validate_resume(resume_text):
@@ -60,6 +55,11 @@ async def upload_resume(file: UploadFile = File(...)):
         raise
     except Exception:
         pass  # If validation itself fails, proceed anyway
+
+    try:
+        first_question = generate_first_question(resume_text)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI API error: {str(e)}")
 
     session_id = str(uuid.uuid4())
     sessions[session_id] = {
