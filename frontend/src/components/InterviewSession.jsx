@@ -2,8 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { submitAnswer } from '../api';
 
 const TOTAL_QUESTIONS = 5;
-const MAX_RECORD_SECONDS = 90;
-const SILENCE_TIMEOUT_MS = 10000; // auto-submit after 10s of silence
+const MAX_RECORD_SECONDS = 120;
+const SILENCE_TIMEOUT_MS = 12000; // auto-submit after 12s of silence
 
 export default function InterviewSession({ sessionId, firstQuestion, onComplete }) {
   const [currentQuestion, setCurrentQuestion] = useState(firstQuestion);
@@ -13,34 +13,30 @@ export default function InterviewSession({ sessionId, firstQuestion, onComplete 
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [status, setStatus] = useState('speaking'); // speaking | recording | processing | idle
   const [error, setError] = useState('');
-  const [previousQuestions, setPreviousQuestions] = useState([]);
-  const [previousAnswers, setPreviousAnswers] = useState([]);
   const [timer, setTimer] = useState(MAX_RECORD_SECONDS);
   const [speechSupported, setSpeechSupported] = useState(true);
 
+  // ─── Refs for mutable state (avoids stale closures) ───
   const recognitionRef = useRef(null);
-  const timerRef = useRef(null);
-  const silenceRef = useRef(null);
+  const timerIntervalRef = useRef(null);
+  const silenceTimeoutRef = useRef(null);
   const transcriptRef = useRef('');
   const isSubmittingRef = useRef(false);
   const shouldListenRef = useRef(false);
-  const handleSubmitRef = useRef(null);
-  const startListeningRef = useRef(null);
 
-  // Refs to avoid stale closures — always hold the latest values
-  const currentQuestionRef = useRef(currentQuestion);
-  const previousQuestionsRef = useRef(previousQuestions);
-  const previousAnswersRef = useRef(previousAnswers);
+  // These refs always hold the LATEST values so any callback can read them
+  const currentQuestionRef = useRef(firstQuestion);
+  const previousQuestionsRef = useRef([]);
+  const previousAnswersRef = useRef([]);
+  const questionNumberRef = useRef(1);
 
-  useEffect(() => { currentQuestionRef.current = currentQuestion; }, [currentQuestion]);
-  useEffect(() => { previousQuestionsRef.current = previousQuestions; }, [previousQuestions]);
-  useEffect(() => { previousAnswersRef.current = previousAnswers; }, [previousAnswers]);
-
+  // ─── Check browser support ───
   useEffect(() => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) setSpeechSupported(false);
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) setSpeechSupported(false);
   }, []);
 
+  // ─── Speak text via TTS ───
   const speakQuestion = useCallback((text) => {
     return new Promise((resolve) => {
       if (!window.speechSynthesis) { resolve(); return; }
@@ -64,40 +60,57 @@ export default function InterviewSession({ sessionId, firstQuestion, onComplete 
     });
   }, []);
 
-  const stopRecording = useCallback(() => {
+  // ─── Cleanup all recording resources ───
+  const cleanupRecording = useCallback(() => {
     shouldListenRef.current = false;
-    if (recognitionRef.current) { recognitionRef.current.stop(); recognitionRef.current = null; }
-    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-    if (silenceRef.current) { clearTimeout(silenceRef.current); silenceRef.current = null; }
+    if (recognitionRef.current) {
+      try { recognitionRef.current.abort(); } catch (_) { /* ignore */ }
+      recognitionRef.current = null;
+    }
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+    if (silenceTimeoutRef.current) {
+      clearTimeout(silenceTimeoutRef.current);
+      silenceTimeoutRef.current = null;
+    }
     setIsRecording(false);
   }, []);
 
-  const handleSubmit = useCallback(async () => {
+  // ─── Submit answer to backend ───
+  const doSubmit = useCallback(async () => {
     if (isSubmittingRef.current) return;
+
     const answer = transcriptRef.current.trim();
     if (!answer) {
-      setError('No speech detected. Listening again...');
-      setTimeout(() => startListeningRef.current?.(), 1500);
+      // No speech detected — restart listening after a short delay
+      setError('No speech detected. Listening again…');
+      cleanupRecording();
+      setTimeout(() => {
+        setError('');
+        startListeningFn();
+      }, 2000);
       return;
     }
 
     isSubmittingRef.current = true;
-    stopRecording();
+    cleanupRecording();
     setStatus('processing');
     setError('');
 
-    // Read the LATEST values from refs — not the stale closure
-    const latestQuestion = currentQuestionRef.current;
-    const latestPrevQ = previousQuestionsRef.current;
-    const latestPrevA = previousAnswersRef.current;
+    // Read latest values from refs
+    const q = currentQuestionRef.current;
+    const prevQ = [...previousQuestionsRef.current];
+    const prevA = [...previousAnswersRef.current];
 
     try {
       const data = await submitAnswer({
         session_id: sessionId,
-        current_question: latestQuestion,
+        current_question: q,
         current_answer: answer,
-        previous_questions: latestPrevQ,
-        previous_answers: latestPrevA,
+        previous_questions: prevQ,
+        previous_answers: prevA,
       });
 
       if (data.final_report) {
@@ -107,31 +120,49 @@ export default function InterviewSession({ sessionId, firstQuestion, onComplete 
         return;
       }
 
-      setPreviousQuestions((prev) => [...prev, latestQuestion]);
-      setPreviousAnswers((prev) => [...prev, answer]);
-
+      // Update refs FIRST, then state (so refs are ready before next render)
       const nextQ = data.next_question;
+      const newQNum = data.question_count + 1;
+
+      previousQuestionsRef.current = [...prevQ, q];
+      previousAnswersRef.current = [...prevA, answer];
+      currentQuestionRef.current = nextQ;
+      questionNumberRef.current = newQNum;
+
       setCurrentQuestion(nextQ);
-      setQuestionNumber(data.question_count + 1);
+      setQuestionNumber(newQNum);
       setTranscript('');
       transcriptRef.current = '';
       isSubmittingRef.current = false;
 
-      // Speak the next question immediately
+      // Speak the next question, then start listening
       setStatus('speaking');
       await speakQuestion(nextQ);
-      startListeningRef.current?.();
+      startListeningFn();
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.');
       setStatus('idle');
       isSubmittingRef.current = false;
     }
-  }, [sessionId, onComplete, stopRecording, speakQuestion]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, onComplete, cleanupRecording, speakQuestion]);
 
-  const startListening = useCallback(() => {
+  // ─── Keep a ref to doSubmit so callbacks can call the latest version ───
+  const doSubmitRef = useRef(doSubmit);
+  useEffect(() => { doSubmitRef.current = doSubmit; }, [doSubmit]);
+
+  // ─── Start speech recognition ───
+  function startListeningFn() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) { setError('Speech recognition not supported. Please use Chrome.'); return; }
+    if (!SpeechRecognition) {
+      setError('Speech recognition not supported. Please use Chrome.');
+      return;
+    }
 
+    // Clean up any previous recording session first
+    cleanupRecording();
+
+    // Reset state for the new recording
     setTranscript('');
     transcriptRef.current = '';
     setError('');
@@ -146,17 +177,17 @@ export default function InterviewSession({ sessionId, firstQuestion, onComplete 
 
     let finalTranscript = '';
 
+    // ── Silence timer: auto-submit after SILENCE_TIMEOUT_MS of no speech ──
     const resetSilenceTimer = () => {
-      if (silenceRef.current) clearTimeout(silenceRef.current);
-      silenceRef.current = setTimeout(() => {
-        // If the AI is still speaking, reschedule — don't submit yet
+      if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+      silenceTimeoutRef.current = setTimeout(() => {
+        // Don't auto-submit while the AI is still speaking
         if (window.speechSynthesis?.speaking) {
           resetSilenceTimer();
           return;
         }
-        if (!isSubmittingRef.current) {
-          stopRecording();
-          handleSubmitRef.current?.(); // handles both empty (restarts) and non-empty (submits)
+        if (!isSubmittingRef.current && shouldListenRef.current) {
+          doSubmitRef.current?.();
         }
       }, SILENCE_TIMEOUT_MS);
     };
@@ -165,8 +196,11 @@ export default function InterviewSession({ sessionId, firstQuestion, onComplete 
       let interim = '';
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
-        if (result.isFinal) { finalTranscript += result[0].transcript + ' '; }
-        else { interim += result[0].transcript; }
+        if (result.isFinal) {
+          finalTranscript += result[0].transcript + ' ';
+        } else {
+          interim += result[0].transcript;
+        }
       }
       const full = finalTranscript + interim;
       transcriptRef.current = full;
@@ -181,19 +215,19 @@ export default function InterviewSession({ sessionId, firstQuestion, onComplete 
     };
 
     recognition.onend = () => {
-      // Chrome can stop recognition unexpectedly — restart with a fresh instance
+      // Chrome can stop recognition unexpectedly — restart if we should still be listening
       if (shouldListenRef.current && !isSubmittingRef.current) {
         try {
-          const freshRecognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-          freshRecognition.continuous = true;
-          freshRecognition.interimResults = true;
-          freshRecognition.lang = 'en-US';
-          freshRecognition.onresult = recognition.onresult;
-          freshRecognition.onerror = recognition.onerror;
-          freshRecognition.onend = recognition.onend;
-          recognitionRef.current = freshRecognition;
-          freshRecognition.start();
-        } catch (e) { /* ignore restart errors */ }
+          const fresh = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+          fresh.continuous = true;
+          fresh.interimResults = true;
+          fresh.lang = 'en-US';
+          fresh.onresult = recognition.onresult;
+          fresh.onerror = recognition.onerror;
+          fresh.onend = recognition.onend;
+          recognitionRef.current = fresh;
+          fresh.start();
+        } catch (_) { /* ignore restart errors */ }
       }
     };
 
@@ -201,38 +235,52 @@ export default function InterviewSession({ sessionId, firstQuestion, onComplete 
     recognition.start();
     setIsRecording(true);
     setStatus('recording');
-    resetSilenceTimer(); // starts the 6s timer — it auto-reschedules while AI is speaking
+    resetSilenceTimer();
 
-    timerRef.current = setInterval(() => {
+    // Countdown timer
+    timerIntervalRef.current = setInterval(() => {
       setTimer((prev) => {
-        if (prev <= 1) { stopRecording(); handleSubmitRef.current?.(); return 0; }
+        if (prev <= 1) {
+          // Time's up — submit
+          if (!isSubmittingRef.current) {
+            doSubmitRef.current?.();
+          }
+          return 0;
+        }
         return prev - 1;
       });
     }, 1000);
-  }, [stopRecording]);
+  }
 
-  // Keep refs in sync with latest function versions — breaks circular dependency
-  useEffect(() => { handleSubmitRef.current = handleSubmit; }, [handleSubmit]);
-  useEffect(() => { startListeningRef.current = startListening; }, [startListening]);
-
-  // Speak the first question on mount
+  // ─── Speak the first question on mount, then start listening ───
   useEffect(() => {
+    let cancelled = false;
+
     const init = async () => {
       await new Promise(r => setTimeout(r, 500));
       window.speechSynthesis?.getVoices();
+      if (cancelled) return;
       setStatus('speaking');
       await speakQuestion(firstQuestion);
-      startListening();
+      if (cancelled) return;
+      startListeningFn();
     };
     init();
 
     return () => {
+      cancelled = true;
       window.speechSynthesis?.cancel();
-      if (recognitionRef.current) recognitionRef.current.stop();
-      if (timerRef.current) clearInterval(timerRef.current);
-      if (silenceRef.current) clearTimeout(silenceRef.current);
+      cleanupRecording();
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ─── Manual "Done Speaking" button ───
+  const handleDoneClick = () => {
+    if (!isSubmittingRef.current) {
+      doSubmitRef.current?.();
+    }
+  };
 
   if (!speechSupported) {
     return (
@@ -301,7 +349,7 @@ export default function InterviewSession({ sessionId, firstQuestion, onComplete 
 
       {/* Action Button */}
       {status === 'recording' && (
-        <button className="btn btn-stop" onClick={() => { stopRecording(); handleSubmit(); }}>
+        <button className="btn btn-stop" onClick={handleDoneClick}>
           ⏹️ Done Speaking
         </button>
       )}
