@@ -86,7 +86,7 @@ async def submit_answer(req: EvaluateRequest):
     session["answers"].append(current_answer)
     question_number = len(session["answers"])
 
-    # If all questions answered → generate final report
+    # If all questions answered → generate final 
     if question_number >= TOTAL_QUESTIONS:
         try:
             report = generate_final_report(
