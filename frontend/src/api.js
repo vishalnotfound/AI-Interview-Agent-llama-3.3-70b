@@ -1,4 +1,8 @@
-const API_BASE = 'http://localhost:8000';
+// In production (Docker), nginx proxies API calls — use relative URLs.
+// In local dev (Vite on :5173), point to the backend directly.
+const API_BASE = window.location.port === '5173'
+    ? 'http://localhost:8000'
+    : '';
 
 export async function uploadResume(file) {
     const formData = new FormData();
