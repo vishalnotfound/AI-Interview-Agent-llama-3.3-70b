@@ -7,8 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  # ── CI: lint, build, verify ──────────────────────────────────
-  ci:
+  # ── CI: lint, build, verify ─────────
     name: Build & Verify
     runs-on: ubuntu-latest
 
