@@ -25,7 +25,7 @@ app.add_middleware(
 # In-memory session     
 sessions: dict = {}
 
-TOTAL_QUESTIONS = 7
+TOTAL_QUESTIONS = 6
 
 
 @app.post("/upload-resume")
