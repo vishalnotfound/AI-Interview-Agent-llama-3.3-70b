@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { submitAnswer } from '../api';
 
-const TOTAL_QUESTIONS = 7;
+const TOTAL_QUESTIONS = 6;
 const MAX_RECORD_SECONDS = 120;
 const SILENCE_TIMEOUT_MS = 8000; // auto-submit after 8s of silence
 
