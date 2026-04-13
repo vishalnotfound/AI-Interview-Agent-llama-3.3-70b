@@ -1,58 +1,76 @@
-# AI Interview Agent
+# AI Interview Agent LLaMA 3.3 70B
 
-## Overview
-
-The AI Interview Agent is an application designed to facilitate mock interviews using AI. It leverages advanced natural language processing techniques to simulate interview scenarios for job seekers to prepare effectively.
+## Project Overview
+The AI Interview Agent is designed to simulate interview scenarios and provide feedback for both candidates and interviewers. Leveraging advanced natural language processing techniques, this agent can conduct interviews, assess responses, and provide relevant guidance.
 
 ## Features
-- **Realistic Interview Simulations**: Engage in lifelike interview scenarios with AI.
-- **Feedback Mechanism**: Receive constructive feedback on your responses.
-- **Customizable Interviews**: Customize the interview based on specific job roles and industries.
+- **Realistic Interview Scenarios**: Various roles and scenarios to choose from.
+- **Feedback Mechanism**: Instant feedback on performance with recommendations.
+- **User-Friendly Interface**: Simple and intuitive frontend.
+- **Customizability**: Options for both interviewers and candidates to customize settings.
 
-## Frontend Setup Instructions
-
-### Prerequisites
-1. **Node.js** (version 14 or later): Make sure you have Node.js installed on your machine. You can download it from [Node.js official website](https://nodejs.org/).
-2. **npm** (Node Package Manager): npm comes bundled with Node.js.
-3. **Git**: Ensure Git is installed for version control.
-
-### Cloning the Repository
-1. Open your terminal/command prompt.
-2. Clone the repository:
+## Frontend Setup
+1. **Clone the Repository**:
    ```bash
    git clone https://github.com/vishalnotfound/AI-Interview-Agent-llama-3.3-70b.git
    cd AI-Interview-Agent-llama-3.3-70b
    ```
+2. **Install Dependencies**:
+   ```bash
+   npm install
+   ```
+3. **Run the Application**:
+   ```bash
+   npm start
+   ```
+   Access the application at `http://localhost:3000`.
 
-### Installing Dependencies
-Run the following command to install the required dependencies:
-```bash
-npm install
+## Backend Setup
+1. **Clone the Repository** (same as frontend):
+   ```bash
+   git clone https://github.com/vishalnotfound/AI-Interview-Agent-llama-3.3-70b.git
+   cd AI-Interview-Agent-llama-3.3-70b
+   ```
+2. **Install Backend Dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. **Setup Environment Variables**:
+   Create a `.env` file in the root directory and add necessary environment variables:
+   ```
+   DATABASE_URL=<your_database_url>
+   SECRET_KEY=<your_secret_key>
+   ```
+4. **Run the Backend**:
+   ```bash
+   python app.py
+   ```
+
+## API Endpoints
+- **`GET /api/interview`**: Fetch available interview scenarios.
+- **`POST /api/interview/start`**: Start a new interview session.
+- **`POST /api/interview/submit`**: Submit responses for assessment.
+- **`GET /api/feedback`**: Retrieve feedback based on submitted responses.
+
+## Troubleshooting
+- **Issue**: App not starting.
+  - **Solution**: Ensure all dependencies are installed and environment variables are set correctly.
+- **Issue**: API call fails.
+  - **Solution**: Check network connection and validate API endpoint.
+
+## Project Structure
+```
+AI-Interview-Agent-llama-3.3-70b/
+├── backend/
+│   ├── app.py
+│   ├── requirements.txt
+│   └── .env
+├── frontend/
+│   ├── public/
+│   ├── src/
+│   └── package.json
+└── README.md
 ```
 
-### Running the Application
-To start the frontend application, use:
-```bash
-npm start
-```
-This will start the application on `http://localhost:3000`.
-
-### Building for Production
-If you would like to create an optimized build for production, run:
-```bash
-npm run build
-```
-This will generate static files in the `build` directory.
-
-### Additional Configuration
-The application may require additional configuration for connecting to the backend API. Please refer to the backend documentation for details on API endpoints and authentication.
-
-### Troubleshooting
-- **Dependencies Errors**: If you encounter errors during installation, try deleting the `node_modules` folder and the `package-lock.json` file, then run `npm install` again.
-- **Port Issues**: If `3000` is in use, you might need to run the app on a different port by specifying the port in your start script.
-
-## Contributing
-Contributions are welcome! Please read the [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to contribute to this project.
-
-## License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## Conclusion
+This project serves as a powerful tool for interview preparation. Please explore the available features and provide feedback for future improvements.
