@@ -1,13 +1,15 @@
 # AI Interview Agent LLaMA 3.3 70B
 
 ## Project Overview
-The AI Interview Agent is designed to simulate interview scenarios and provide feedback for both candidates and interviewers. Leveraging advanced natural language processing techniques, this agent can conduct interviews, assess responses, and provide relevant guidance.
+The AI Interview Agent is designed to simulate interview scenarios and provide feedback to the candidates. Leveraging advanced natural language processing techniques, this agent can conduct interviews, assess responses, and provide relevant guidance and feedback.
+It has a score card as well after the completion of the interview and it suggest what candidate should improve.
+Interview start after the candidate uploads its resume and hit the start interview button.
 
 ## Features
 - **Realistic Interview Scenarios**: Various roles and scenarios to choose from.
+- - **Question generation based on last answer**: Agent uses RAG to generate the next question on whatever the uesr has responded in real time.
 - **Feedback Mechanism**: Instant feedback on performance with recommendations.
 - **User-Friendly Interface**: Simple and intuitive frontend.
-- **Customizability**: Options for both interviewers and candidates to customize settings.
 
 ## Frontend Setup
 1. **Clone the Repository**:
@@ -21,9 +23,8 @@ The AI Interview Agent is designed to simulate interview scenarios and provide f
    ```
 3. **Run the Application**:
    ```bash
-   npm start
+   npm run dev
    ```
-   Access the application at `http://localhost:3000`.
 
 ## Backend Setup
 1. **Clone the Repository** (same as frontend):
@@ -43,34 +44,7 @@ The AI Interview Agent is designed to simulate interview scenarios and provide f
    ```
 4. **Run the Backend**:
    ```bash
-   python app.py
+   uvicorn main:app --reload
    ```
-
-## API Endpoints
-- **`GET /api/interview`**: Fetch available interview scenarios.
-- **`POST /api/interview/start`**: Start a new interview session.
-- **`POST /api/interview/submit`**: Submit responses for assessment.
-- **`GET /api/feedback`**: Retrieve feedback based on submitted responses.
-
-## Troubleshooting
-- **Issue**: App not starting.
-  - **Solution**: Ensure all dependencies are installed and environment variables are set correctly.
-- **Issue**: API call fails.
-  - **Solution**: Check network connection and validate API endpoint.
-
-## Project Structure
-```
-AI-Interview-Agent-llama-3.3-70b/
-├── backend/
-│   ├── app.py
-│   ├── requirements.txt
-│   └── .env
-├── frontend/
-│   ├── public/
-│   ├── src/
-│   └── package.json
-└── README.md
-```
-
 ## Conclusion
 This project serves as a powerful tool for interview preparation. Please explore the available features and provide feedback for future improvements.
